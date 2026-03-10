@@ -54,7 +54,7 @@ namespace StockSense.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Appointments");
+                    b.ToTable("Appointments", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
@@ -295,16 +295,13 @@ namespace StockSense.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("BuildRequests");
+                    b.ToTable("BuildRequests", (string)null);
                 });
 
             modelBuilder.Entity("StockSense.Shared.Product", b =>
                 {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+                    b.Property<string>("Id")
+                        .HasColumnType("nvarchar(450)");
 
                     b.Property<string>("Brand")
                         .IsRequired()
@@ -327,7 +324,7 @@ namespace StockSense.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Products");
+                    b.ToTable("Products", (string)null);
                 });
 
             modelBuilder.Entity("StoreService", b =>
@@ -347,7 +344,7 @@ namespace StockSense.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("StoreServices");
+                    b.ToTable("StoreServices", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>

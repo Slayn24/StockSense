@@ -3,6 +3,7 @@
 @layout EmptyLayout
 @using StockSense.Shared
 @using System.Net.Http.Json
+@using System.Text.Json
 @inject HttpClient Http
 @inject NavigationManager Nav
 
@@ -64,6 +65,11 @@
             <div style="display: flex; flex-direction: column; gap: 10px;">
                 <button @onclick="SendEmailQuote" disabled="@isProcessing" style="width: 100%; padding: 12px; background: #333; color: white; font-weight: bold; border: 1px solid #555; border-radius: 5px; cursor: pointer;">SEND QUOTE TO EMAIL</button>
                 <button @onclick="SubmitBuildToAdmin" disabled="@isProcessing" style="width: 100%; padding: 12px; background: #ff3e3e; color: white; font-weight: bold; border: none; border-radius: 5px; cursor: pointer;">SUBMIT BUILD TO SHOP</button>
+
+                @* --- NEW VIEW MY BUILDS BUTTON --- *@
+                <button @onclick='() => Nav.NavigateTo("/my-builds")' style="width: 100%; padding: 12px; background: transparent; color: #ff3e3e; font-weight: bold; border: 2px solid #ff3e3e; border-radius: 5px; cursor: pointer; margin-top: 10px;">
+                    VIEW MY BUILDS
+                </button>
             </div>
         </div>
     </div>
@@ -168,15 +174,12 @@
 
     private async Task SubmitBuildToAdmin()
     {
-        // 1. Check if the user is logged in
+        // 1. Check Login
         var authState = await AuthStateTask!;
-
         if (authState.User.Identity == null || !authState.User.Identity.IsAuthenticated)
         {
-            // Redirect to Login, and remember where they were so we can bring them back
-            var returnUrl = Nav.Uri;
-            // NOTE: Check your project's login path. It is often "/login" or "/Identity/Account/Login"
-            Nav.NavigateTo($"/Account/Login?returnUrl={Uri.EscapeDataString(returnUrl)}", true);
+            // Redirect to Login
+            Nav.NavigateTo($"Account/Login?returnUrl={Uri.EscapeDataString(Nav.Uri)}", true);
             return;
         }
 
@@ -184,7 +187,6 @@
         if (!selectedParts.Any())
         {
             statusMessage = "Please select parts first.";
-            isSuccess = false;
             return;
         }
 
@@ -195,21 +197,27 @@
         {
             var userName = authState.User.Identity.Name ?? "Guest";
 
+            // --- THIS IS THE FIX ---
+            // We must Serialize the WHOLE list so the Admin Panel can read Price, Brand, etc.
+            var jsonString = JsonSerializer.Serialize(selectedParts);
+
             var buildRequest = new BuildRequest
             {
                 CustomerName = userName,
-                SelectedPartsJson = string.Join(", ", selectedParts.Select(p => p.Name)),
+                SelectedPartsJson = jsonString, // <--- SAVING AS JSON NOW
                 TotalPrice = selectedParts.Sum(p => p.Price),
-                Status = "Pending"
+                Status = "Pending",
+                CreatedAt = DateTime.Now
             };
 
-            var response = await Http.PostAsJsonAsync("api/builds/submit", buildRequest);
+            // Post to the correct endpoint
+            var response = await Http.PostAsJsonAsync("api/builds", buildRequest);
 
             if (response.IsSuccessStatusCode)
             {
                 statusMessage = "Build submitted successfully!";
                 isSuccess = true;
-                selectedParts.Clear();
+                selectedParts.Clear(); // Clear cart after success
             }
             else
             {
@@ -222,6 +230,7 @@
             statusMessage = $"Error: {ex.Message}";
             isSuccess = false;
         }
+
         isProcessing = false;
     }
 }

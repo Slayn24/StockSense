@@ -10,7 +10,7 @@ using StockSense.Components.Account.Pages;
 using StockSense.Components.Account.Pages.Manage;
 using StockSense.Data;
 
-namespace Microsoft.AspNetCore.Routing
+namespace StockSense.Components.Account
 {
     internal static class IdentityComponentsEndpointRouteBuilderExtensions
     {

@@ -1,8 +1,7 @@
 ﻿using System.Security.Claims;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using StockSense.Data; // Ensure this matches your project namespace
+using StockSense.Data;
 
 namespace StockSense.Controllers
 {

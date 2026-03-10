@@ -1,83 +1,66 @@
-﻿@page "/admin/builds"
+﻿@page "/my-builds"
+@layout EmptyLayout
 @rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
 @using StockSense.Shared
 @using System.Text.Json
 @using System.Globalization
 @using System.Net.Http.Json
 @inject HttpClient Http
+@inject NavigationManager Nav
 
-<div class="admin-container">
+<div class="customer-container">
     <div class="header-section">
-        <h2>Manage Custom Builds</h2>
-        <span class="badge-count">@ActiveBuilds.Count(b => b.Status == "Pending") Pending</span>
+        <h2>My Build History</h2>
+        <p style="color: #888;">Track the status of your submitted custom builds.</p>
     </div>
 
-    @if (allBuilds == null)
+    @if (isLoading)
     {
-        <div class="loading-state">Loading build requests...</div>
+        <div style="color: gray;">Loading your builds...</div>
+    }
+    else if (myBuilds == null || !myBuilds.Any())
+    {
+        <div style="background: #1e1e1e; padding: 30px; border-radius: 8px; text-align: center; border: 1px solid #333;">
+            <h3 style="color: #ccc;">You haven't submitted any builds yet.</h3>
+            <button @onclick='() => Nav.NavigateTo("/build")' style="margin-top: 15px; padding: 10px 20px; background: #ff3e3e; color: white; border: none; border-radius: 5px; cursor: pointer;">Start a New Build</button>
+        </div>
     }
     else
     {
-        @* --- NEW TABS NAVIGATION --- *@
-        <div class="tabs-container">
-            <button class="tab-btn @(activeTab == "Active" ? "active" : "")" @onclick='() => activeTab = "Active"'>
-                Active Builds (@ActiveBuilds.Count())
-            </button>
-            <button class="tab-btn @(activeTab == "History" ? "active" : "")" @onclick='() => activeTab = "History"'>
-                History (@HistoryBuilds.Count())
-            </button>
-        </div>
-
         <div class="table-responsive">
             <table class="table-dark">
                 <thead>
                     <tr>
-                        <th style="width: 20%;">Customer</th>
-                        <th style="width: 20%;">Date</th>
-                        <th style="width: 15%;">Summary</th>
-                        <th style="width: 15%;">Total Value</th>
-                        <th style="width: 15%;">Status</th>
+                        <th style="width: 25%;">Date Submitted</th>
+                        <th style="width: 20%;">Items</th>
+                        <th style="width: 20%;">Total Value</th>
+                        <th style="width: 20%;">Status</th>
                         <th style="width: 15%;">Action</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @* --- NOW LOOPING THROUGH 'DisplayBuilds' INSTEAD OF ALL BUILDS --- *@
-                    @foreach (var build in DisplayBuilds)
+                    @foreach (var build in myBuilds)
                     {
                         var parts = ParseParts(build.SelectedPartsJson);
                         var totalPrice = parts.Sum(p => p.Price);
 
                         <tr class="table-row">
-                            <td class="customer-name">@build.CustomerName</td>
                             <td class="date">@build.CreatedAt.ToString("MMM dd, yyyy h:mm tt")</td>
 
-                            <td class="summary">
-                                <span class="item-count">@parts.Count items</span>
-                            </td>
+                            <td><span class="item-count">@parts.Count items</span></td>
 
                             <td class="price">@totalPrice.ToString("C0", CultureInfo.CreateSpecificCulture("en-PH"))</td>
 
                             <td>
-                                <select value="@build.Status"
-                                        @onchange="@(e => UpdateStatus(build, e.Value?.ToString() ?? "Pending"))"
-                                        class="status-dropdown @GetStatusClass(build.Status)">
-                                    <option value="Pending">Pending</option>
-                                    <option value="Confirmed">Confirmed</option>
-                                    <option value="Completed">Completed</option>
-                                    <option value="Cancelled">Cancelled</option>
-                                </select>
+                                <span class="status-badge @GetStatusClass(build.Status)">
+                                    @build.Status
+                                </span>
                             </td>
                             <td>
                                 <button class="btn-view" @onclick="() => OpenModal(build, parts)">
-                                    <span class="icon">👁</span> View Details
+                                    <span class="icon">👁</span> View
                                 </button>
                             </td>
-                        </tr>
-                    }
-                    @if (!DisplayBuilds.Any())
-                    {
-                        <tr>
-                            <td colspan="6" style="text-align: center; padding: 30px; color: #888;">No builds found in this section.</td>
                         </tr>
                     }
                 </tbody>
@@ -85,14 +68,15 @@
         </div>
     }
 
+    @* --- MODAL FOR VIEWING DETAILS (Same as Admin) --- *@
     @if (ShowModal && CurrentParts != null)
     {
         <div class="modal-backdrop" @onclick="CloseModal">
             <div class="modal-content" @onclick:stopPropagation>
                 <div class="modal-header">
                     <div>
-                        <h3>@CurrentBuild?.CustomerName's Build</h3>
-                        <span class="modal-date">@CurrentBuild?.CreatedAt.ToString("f")</span>
+                        <h3>Build Details</h3>
+                        <span class="modal-date">Submitted: @CurrentBuild?.CreatedAt.ToString("f")</span>
                     </div>
                     <button class="close-btn" @onclick="CloseModal">×</button>
                 </div>
@@ -131,36 +115,39 @@
 </div>
 
 @code {
-    private List<BuildRequest>? allBuilds;
-
-    // --- NEW TAB STATE & FILTERING LOGIC ---
-    private string activeTab = "Active";
-
-    private IEnumerable<BuildRequest> ActiveBuilds =>
-        allBuilds?.Where(b => b.Status == "Pending" || b.Status == "Confirmed").OrderByDescending(b => b.CreatedAt) ?? Enumerable.Empty<BuildRequest>();
-
-    private IEnumerable<BuildRequest> HistoryBuilds =>
-        allBuilds?.Where(b => b.Status == "Completed" || b.Status == "Cancelled").OrderByDescending(b => b.CreatedAt) ?? Enumerable.Empty<BuildRequest>();
-
-    private IEnumerable<BuildRequest> DisplayBuilds => activeTab == "Active" ? ActiveBuilds : HistoryBuilds;
-    // ----------------------------------------
+    [CascadingParameter] private Task<AuthenticationState>? AuthStateTask { get; set; }
+    private List<BuildRequest>? myBuilds;
+    private bool isLoading = true;
 
     // Modal State
     private bool ShowModal = false;
     private BuildRequest? CurrentBuild;
     private List<Product> CurrentParts = new List<Product>();
 
-    protected override async Task OnInitializedAsync() => await LoadBuilds();
-
-    private async Task LoadBuilds() => allBuilds = await Http.GetFromJsonAsync<List<BuildRequest>>("api/builds/all");
-
-    private async Task UpdateStatus(BuildRequest build, string newStatus)
+    protected override async Task OnInitializedAsync()
     {
-        await Http.PutAsJsonAsync($"api/builds/{build.Id}/status", newStatus);
-        build.Status = newStatus;
+        var authState = await AuthStateTask!;
+        if (authState.User.Identity == null || !authState.User.Identity.IsAuthenticated)
+        {
+            Nav.NavigateTo($"/Account/Login?returnUrl={Uri.EscapeDataString(Nav.Uri)}", true);
+            return;
+        }
 
-        // Note: Because 'build.Status' is updated, Blazor will automatically recalculate
-        // ActiveBuilds and HistoryBuilds, moving the row to the other tab instantly!
+        var userName = authState.User.Identity.Name;
+
+        try
+        {
+            // Call the new endpoint using the logged-in user's name
+            myBuilds = await Http.GetFromJsonAsync<List<BuildRequest>>($"api/builds/customer/{userName}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading builds: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
     }
 
     private List<Product> ParseParts(string json)
@@ -171,11 +158,7 @@
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
             return JsonSerializer.Deserialize<List<Product>>(json, options) ?? new List<Product>();
         }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error parsing JSON: {ex.Message}");
-            return new List<Product>();
-        }
+        catch { return new List<Product>(); }
     }
 
     private void OpenModal(BuildRequest build, List<Product> parts)
@@ -193,24 +176,21 @@
         "confirmed" => "status-confirmed",
         "completed" => "status-completed",
         "cancelled" => "status-cancelled",
-        _ => ""
+        _ => "status-pending"
     };
 }
 
 <style>
-    /* MAIN LAYOUT */
-    .admin-container {
+    /* MAIN LAYOUT (Matches your dark theme) */
+    .customer-container {
         padding: 30px;
-        background-color: #121212;
+        background-color: #000;
         min-height: 100vh;
         color: #e0e0e0;
         font-family: 'Segoe UI', sans-serif;
     }
 
     .header-section {
-        display: flex;
-        align-items: center;
-        gap: 15px;
         margin-bottom: 25px;
         border-bottom: 1px solid #333;
         padding-bottom: 15px;
@@ -222,53 +202,12 @@
         color: #fff;
     }
 
-    .badge-count {
-        background: #d32f2f;
-        color: white;
-        padding: 4px 10px;
-        border-radius: 12px;
-        font-size: 0.8rem;
-        font-weight: bold;
-    }
-
-    /* --- NEW TABS STYLES --- */
-    .tabs-container {
-        display: flex;
-        gap: 10px;
-        margin-bottom: 20px;
-    }
-
-    .tab-btn {
-        background: #1e1e1e;
-        color: #888;
-        border: 1px solid #333;
-        padding: 10px 20px;
-        border-radius: 6px;
-        cursor: pointer;
-        font-weight: 600;
-        font-size: 0.95rem;
-        transition: all 0.2s ease;
-    }
-
-        .tab-btn:hover {
-            background: #252525;
-            color: #ddd;
-        }
-
-        .tab-btn.active {
-            background: #333;
-            color: #fff;
-            border-color: #555;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
-        }
-    /* ----------------------- */
-
     /* TABLE STYLES */
     .table-responsive {
-        background: #1e1e1e;
+        background: #111;
         border-radius: 8px;
         overflow: hidden;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        border: 1px solid #333;
     }
 
     .table-dark {
@@ -277,33 +216,27 @@
     }
 
         .table-dark th {
-            background: #252525;
+            background: #1a1a1a;
             padding: 15px;
             text-align: left;
             font-size: 0.85rem;
             color: #aaa;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
         }
 
         .table-dark td {
             padding: 15px;
-            border-top: 1px solid #2a2a2a;
+            border-top: 1px solid #222;
             vertical-align: middle;
         }
 
     .table-row:hover {
-        background-color: #2a2a2a;
-    }
-
-    .customer-name {
-        font-weight: bold;
-        color: #fff;
+        background-color: #1a1a1a;
     }
 
     .date {
-        color: #888;
-        font-size: 0.9rem;
+        color: #ccc;
+        font-weight: 500;
     }
 
     .item-count {
@@ -319,38 +252,44 @@
         color: #81c784;
     }
 
-    /* DROPDOWN & BUTTONS */
-    .status-dropdown {
-        padding: 6px 10px;
-        border-radius: 4px;
-        border: 1px solid #444;
-        background: #121212;
-        color: #fff;
-        font-size: 0.9rem;
-        cursor: pointer;
-        outline: none;
+    /* STATUS BADGES (Read-only for customer) */
+    .status-badge {
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
     }
 
     .status-pending {
-        border-left: 3px solid #ff9800;
+        background: rgba(255, 152, 0, 0.2);
+        color: #ffb74d;
+        border: 1px solid rgba(255, 152, 0, 0.5);
     }
 
     .status-confirmed {
-        border-left: 3px solid #2196f3;
+        background: rgba(33, 150, 243, 0.2);
+        color: #64b5f6;
+        border: 1px solid rgba(33, 150, 243, 0.5);
     }
 
     .status-completed {
-        border-left: 3px solid #4caf50;
+        background: rgba(76, 175, 80, 0.2);
+        color: #81c784;
+        border: 1px solid rgba(76, 175, 80, 0.5);
     }
 
     .status-cancelled {
-        border-left: 3px solid #f44336;
+        background: rgba(244, 67, 54, 0.2);
+        color: #e57373;
+        border: 1px solid rgba(244, 67, 54, 0.5);
     }
 
     .btn-view {
         background: #333;
         color: #fff;
-        border: 1px solid #444;
+        border: 1px solid #555;
         padding: 6px 12px;
         border-radius: 4px;
         cursor: pointer;
@@ -362,11 +301,11 @@
     }
 
         .btn-view:hover {
-            background: #444;
-            border-color: #666;
+            background: #ff3e3e;
+            border-color: #ff3e3e;
         }
 
-    /* MODAL STYLES */
+    /* MODAL STYLES (Reused from Admin) */
     .modal-backdrop {
         position: fixed;
         top: 0;
@@ -381,7 +320,7 @@
     }
 
     .modal-content {
-        background: #1e1e1e;
+        background: #111;
         width: 600px;
         max-width: 90%;
         max-height: 85vh;
@@ -389,7 +328,6 @@
         border: 1px solid #333;
         display: flex;
         flex-direction: column;
-        box-shadow: 0 10px 25px rgba(0,0,0,0.5);
     }
 
     .modal-header {
@@ -398,7 +336,7 @@
         display: flex;
         justify-content: space-between;
         align-items: start;
-        background: #252525;
+        background: #1a1a1a;
         border-radius: 12px 12px 0 0;
     }
 
@@ -425,7 +363,7 @@
     }
 
         .close-btn:hover {
-            color: #fff;
+            color: #ff3e3e;
         }
 
     .modal-body {
@@ -440,12 +378,11 @@
 
     .category-header {
         font-size: 0.85rem;
-        color: #2196f3;
+        color: #ff3e3e;
         text-transform: uppercase;
         margin-bottom: 10px;
         border-bottom: 1px solid #333;
         padding-bottom: 5px;
-        letter-spacing: 1px;
     }
 
     .part-item {
@@ -454,12 +391,13 @@
         align-items: center;
         margin-bottom: 10px;
         padding: 8px;
-        background: #232323;
+        background: #1a1a1a;
         border-radius: 6px;
+        border: 1px solid #222;
     }
 
     .brand-tag {
-        background: #424242;
+        background: #333;
         color: #fff;
         padding: 2px 6px;
         border-radius: 4px;
@@ -484,7 +422,7 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        background: #252525;
+        background: #1a1a1a;
         border-radius: 0 0 12px 12px;
     }
 
@@ -501,9 +439,9 @@
     }
 
     .btn-close {
-        background: #444;
+        background: #333;
         color: #fff;
-        border: none;
+        border: 1px solid #555;
         padding: 10px 20px;
         border-radius: 6px;
         cursor: pointer;
@@ -511,6 +449,7 @@
     }
 
         .btn-close:hover {
-            background: #555;
+            background: #ff3e3e;
+            border-color: #ff3e3e;
         }
 </style>

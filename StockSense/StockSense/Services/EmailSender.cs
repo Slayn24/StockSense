@@ -3,7 +3,7 @@ using MailKit.Net.Smtp;
 using MimeKit;
 using MailKit.Security;
 using StockSense.Data;
-    public class EmailSender : IEmailSender<ApplicationUser>
+public class EmailSender : IEmailSender<ApplicationUser>
     {
         private readonly IConfiguration _config;
 

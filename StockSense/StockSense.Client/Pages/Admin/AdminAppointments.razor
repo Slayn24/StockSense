@@ -1,90 +1,97 @@
 ﻿@page "/admin/appointments"
 @rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
 
-@using StockSense.shared
+@using StockSense.Shared
 @using System.Net.Http.Json
 @inject HttpClient Http
 
-<div style="padding: 20px; color: white; background: #111; min-height: 100vh;">
-    <h2 style="margin-bottom: 20px;">Manage Appointments</h2>
-
-    @* --- THE TAB BUTTONS --- *@
-    <div style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 15px;">
-        <button @onclick='() => currentTab = "Active"' style="@GetTabStyle("Active")">
-            Active (Pending / Confirmed)
-        </button>
-        <button @onclick='() => currentTab = "Completed"' style="@GetTabStyle("Completed")">
-            Completed
-        </button>
-        <button @onclick='() => currentTab = "Cancelled"' style="@GetTabStyle("Cancelled")">
-            Cancelled
-        </button>
+<div class="admin-container">
+    <div class="header-section">
+        <h2>Manage Appointments</h2>
+        <span class="badge-count">@ActiveAppointments.Count(a => a.Status == "Pending") Pending</span>
     </div>
 
     @if (allAppointments == null)
     {
-        <p style="color: gray;">Loading database records...</p>
-    }
-    else if (!FilteredAppointments.Any())
-    {
-        <div style="padding: 30px; background: #222; border-radius: 8px; text-align: center;">
-            <p style="color: gray; font-size: 1.2em;">No @currentTab.ToLower() appointments found.</p>
-        </div>
+        <div class="loading-state">Loading appointment requests...</div>
     }
     else
     {
-        <table style="width: 100%; text-align: left; border-collapse: collapse; background: #222; border-radius: 8px; overflow: hidden;">
-            <thead style="background: #333;">
-                <tr>
-                    <th style="padding: 15px;">Customer</th>
-                    <th style="padding: 15px;">Date & Time</th>
-                    <th style="padding: 15px;">Services</th>
-                    <th style="padding: 15px;">Total</th>
-                    <th style="padding: 15px;">Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var appt in FilteredAppointments)
-                {
-                    <tr @key="appt.Id" style="border-bottom: 1px solid #444;">
-                        <td style="padding: 15px; font-weight: bold;">@appt.CustomerName</td>
-                        <td style="padding: 15px;">@appt.AppointmentDate.ToShortDateString() <br /> <span style="color: #2196F3;">@appt.TimeSlot</span></td>
-                        <td style="padding: 15px; color: #ccc;">@appt.ServicesRequested</td>
-                        <td style="padding: 15px; font-weight: bold; color: #4CAF50;">P @appt.TotalAmount</td>
-                        <td style="padding: 15px;">
-                            @* The Dropdown automatically saves and triggers the row to move tabs! *@
-                            <select value="@appt.Status"
-                                    @onchange="@(e => UpdateStatus(appt, e.Value?.ToString() ?? "Pending"))"
-                                    style="padding: 8px; background: #111; color: white; border: 1px solid @GetStatusColor(appt.Status); border-radius: 4px; cursor: pointer; outline: none;">
-                                <option value="Pending">Pending</option>
-                                <option value="Confirmed">Confirmed</option>
-                                <option value="Completed">Completed</option>
-                                <option value="Cancelled">Cancelled</option>
-                            </select>
-                        </td>
+        @* --- TABS NAVIGATION (Matches Admin Builds) --- *@
+        <div class="tabs-container">
+            <button class="tab-btn @(currentTab == "Active" ? "active" : "")" @onclick='() => currentTab = "Active"'>
+                Active (@ActiveAppointments.Count())
+            </button>
+            <button class="tab-btn @(currentTab == "History" ? "active" : "")" @onclick='() => currentTab = "History"'>
+                History (@HistoryAppointments.Count())
+            </button>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table-dark">
+                <thead>
+                    <tr>
+                        <th style="width: 20%;">Customer</th>
+                        <th style="width: 25%;">Date & Time</th>
+                        <th style="width: 25%;">Services</th>
+                        <th style="width: 15%;">Total Value</th>
+                        <th style="width: 15%;">Status</th>
                     </tr>
-                }
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                    @foreach (var appt in DisplayAppointments)
+                    {
+                        <tr class="table-row">
+                            <td class="customer-name">@appt.CustomerName</td>
+                            <td class="date">
+                                @appt.AppointmentDate.ToShortDateString()
+                                <span class="time-slot">@appt.TimeSlot</span>
+                            </td>
+
+                            <td class="summary">
+                                @appt.ServicesRequested
+                            </td>
+
+                            <td class="price">P @appt.TotalAmount.ToString("N2")</td>
+
+                            <td>
+                                <select value="@appt.Status"
+                                        @onchange="@(e => UpdateStatus(appt, e.Value?.ToString() ?? "Pending"))"
+                                        class="status-dropdown @GetStatusClass(appt.Status)">
+                                    <option value="Pending">Pending</option>
+                                    <option value="Confirmed">Confirmed</option>
+                                    <option value="Completed">Completed</option>
+                                    <option value="Cancelled">Cancelled</option>
+                                </select>
+                            </td>
+                        </tr>
+                    }
+                    @if (!DisplayAppointments.Any())
+                    {
+                        <tr>
+                            <td colspan="5" style="text-align: center; padding: 30px; color: #888;">No appointments found in this section.</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
     }
 </div>
 
 @code {
-    // 1. We store ALL appointments from the database here
     private List<Appointment>? allAppointments;
 
-    // 2. This tracks which tab the admin is currently looking at
+    // --- TAB STATE & FILTERING LOGIC ---
     private string currentTab = "Active";
 
-    // 3. This dynamically filters the list based on the active tab
-    private IEnumerable<Appointment> FilteredAppointments =>
-        currentTab switch
-        {
-            "Active" => allAppointments?.Where(a => a.Status == "Pending" || a.Status == "Confirmed") ?? Array.Empty<Appointment>(),
-            "Completed" => allAppointments?.Where(a => a.Status == "Completed") ?? Array.Empty<Appointment>(),
-            "Cancelled" => allAppointments?.Where(a => a.Status == "Cancelled") ?? Array.Empty<Appointment>(),
-            _ => Array.Empty<Appointment>()
-        };
+    private IEnumerable<Appointment> ActiveAppointments =>
+        allAppointments?.Where(a => a.Status == "Pending" || a.Status == "Confirmed").OrderBy(a => a.AppointmentDate) ?? Enumerable.Empty<Appointment>();
+
+    private IEnumerable<Appointment> HistoryAppointments =>
+        allAppointments?.Where(a => a.Status == "Completed" || a.Status == "Cancelled").OrderByDescending(a => a.AppointmentDate) ?? Enumerable.Empty<Appointment>();
+
+    private IEnumerable<Appointment> DisplayAppointments => currentTab == "Active" ? ActiveAppointments : HistoryAppointments;
+    // ----------------------------------------
 
     protected override async Task OnInitializedAsync()
     {
@@ -95,7 +102,6 @@
     {
         try
         {
-            // Fetch everything once when the page loads
             allAppointments = await Http.GetFromJsonAsync<List<Appointment>>("api/appointments/all");
         }
         catch (Exception ex)
@@ -113,9 +119,7 @@
             if (response.IsSuccessStatusCode)
             {
                 appt.Status = newStatus;
-
-                // THE FIX: Force Blazor to instantly redraw the UI
-                StateHasChanged();
+                // Blazor automatically recalculates DisplayAppointments and moves the row!
             }
             else
             {
@@ -128,22 +132,174 @@
         }
     }
 
-    // --- UI Helper Methods ---
-
-    // Changes the button style depending on if it is selected
-    private string GetTabStyle(string tabName) =>
-        currentTab == tabName
-            ? "padding: 10px 20px; background: white; color: black; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;"
-            : "padding: 10px 20px; background: #333; color: #aaa; border: none; border-radius: 5px; cursor: pointer;";
-
     // Colors the border of the dropdown so the admin can quickly scan the table
-    private string GetStatusColor(string status) =>
-        status switch
-        {
-            "Pending" => "#ffc107",   // Yellow
-            "Confirmed" => "#2196F3", // Blue
-            "Completed" => "#4CAF50", // Green
-            "Cancelled" => "#f44336", // Red
-            _ => "#555"
-        };
+    private string GetStatusClass(string status) => status?.ToLower() switch
+    {
+        "pending" => "status-pending",
+        "confirmed" => "status-confirmed",
+        "completed" => "status-completed",
+        "cancelled" => "status-cancelled",
+        _ => ""
+    };
 }
+
+<style>
+    /* MAIN LAYOUT */
+    .admin-container {
+        padding: 30px;
+        background-color: #121212;
+        min-height: 100vh;
+        color: #e0e0e0;
+        font-family: 'Segoe UI', sans-serif;
+    }
+
+    .header-section {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        margin-bottom: 25px;
+        border-bottom: 1px solid #333;
+        padding-bottom: 15px;
+    }
+
+    h2 {
+        margin: 0;
+        font-weight: 600;
+        color: #fff;
+    }
+
+    .badge-count {
+        background: #d32f2f;
+        color: white;
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 0.8rem;
+        font-weight: bold;
+    }
+
+    .loading-state {
+        color: #888;
+        font-style: italic;
+    }
+
+    /* --- TABS STYLES --- */
+    .tabs-container {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+    }
+
+    .tab-btn {
+        background: #1e1e1e;
+        color: #888;
+        border: 1px solid #333;
+        padding: 10px 20px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 0.95rem;
+        transition: all 0.2s ease;
+    }
+
+        .tab-btn:hover {
+            background: #252525;
+            color: #ddd;
+        }
+
+        .tab-btn.active {
+            background: #333;
+            color: #fff;
+            border-color: #555;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+        }
+    /* ----------------------- */
+
+    /* TABLE STYLES */
+    .table-responsive {
+        background: #1e1e1e;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    }
+
+    .table-dark {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+        .table-dark th {
+            background: #252525;
+            padding: 15px;
+            text-align: left;
+            font-size: 0.85rem;
+            color: #aaa;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .table-dark td {
+            padding: 15px;
+            border-top: 1px solid #2a2a2a;
+            vertical-align: middle;
+        }
+
+    .table-row:hover {
+        background-color: #2a2a2a;
+    }
+
+    .customer-name {
+        font-weight: bold;
+        color: #fff;
+    }
+
+    .date {
+        color: #ccc;
+        font-size: 0.95rem;
+    }
+
+    .time-slot {
+        display: block;
+        color: #2196F3;
+        font-size: 0.85rem;
+        margin-top: 4px;
+        font-weight: bold;
+    }
+
+    .summary {
+        color: #ccc;
+        font-size: 0.9rem;
+    }
+
+    .price {
+        font-weight: bold;
+        color: #81c784;
+    }
+
+    /* DROPDOWN */
+    .status-dropdown {
+        padding: 6px 10px;
+        border-radius: 4px;
+        border: 1px solid #444;
+        background: #121212;
+        color: #fff;
+        font-size: 0.9rem;
+        cursor: pointer;
+        outline: none;
+    }
+
+    .status-pending {
+        border-left: 3px solid #ff9800;
+    }
+
+    .status-confirmed {
+        border-left: 3px solid #2196f3;
+    }
+
+    .status-completed {
+        border-left: 3px solid #4caf50;
+    }
+
+    .status-cancelled {
+        border-left: 3px solid #f44336;
+    }
+</style>

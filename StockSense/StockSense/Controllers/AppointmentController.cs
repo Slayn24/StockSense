@@ -2,7 +2,8 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StockSense.Data;
-namespace StockSense.Shared;
+
+namespace StockSense.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
