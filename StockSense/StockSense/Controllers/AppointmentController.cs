@@ -1,7 +1,7 @@
-﻿// Controllers/AppointmentsController.cs
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StockSense.Data;
+using StockSense.shared;
 
 namespace StockSense.Controllers;
 
@@ -9,39 +9,46 @@ namespace StockSense.Controllers;
 [Route("api/[controller]")]
 public class AppointmentsController : ControllerBase
 {
-    private readonly ApplicationDbContext _db; // Assumed your DB context name
+    private readonly ApplicationDbContext _db;
 
     public AppointmentsController(ApplicationDbContext db) => _db = db;
 
+    // --- CREATE: Save Appointment with Category ---
     [HttpPost]
     public async Task<IActionResult> Create(Appointment appt)
     {
+        // Ensure new appointments always start as Pending
+        appt.Status = "Pending";
+
+        // If the category is missing for some reason, default it
+        if (string.IsNullOrWhiteSpace(appt.Category))
+        {
+            appt.Category = "General";
+        }
+
         _db.Appointments.Add(appt);
         await _db.SaveChangesAsync();
-        return Ok(new { message = "Appointment booked successfully!" });
+
+        return Ok(new { message = "Appointment booked successfully!", id = appt.Id });
     }
 
-
-
-
+    // --- GET: Booked Slots for Date Picker ---
     [HttpGet("booked-slots")]
     public async Task<ActionResult<List<string>>> GetBookedSlots([FromQuery] DateTime date)
     {
-        // Search the database for appointments matching the requested date
-        // and return ONLY the time slots (e.g., "09:00", "14:30")
         var bookedSlots = await _db.Appointments
-            .Where(a => a.AppointmentDate.Date == date.Date)
+            .Where(a => a.AppointmentDate.Date == date.Date && a.Status != "Cancelled")
             .Select(a => a.TimeSlot)
             .ToListAsync();
 
         return Ok(bookedSlots);
     }
 
-    // 1. Get ALL appointments for the Admin table
+    // --- GET: All Appointments for Admin Table ---
     [HttpGet("all")]
     public async Task<ActionResult<List<Appointment>>> GetAllAppointments()
     {
-        // Fetches all appointments and sorts them by Date, then by Time
+        // Now includes the Category field automatically
         var appointments = await _db.Appointments
             .OrderByDescending(a => a.AppointmentDate)
             .ThenBy(a => a.TimeSlot)
@@ -50,7 +57,7 @@ public class AppointmentsController : ControllerBase
         return Ok(appointments);
     }
 
-    // 2. Update the status of a specific appointment
+    // --- UPDATE: Status (Confirmed, Completed, etc.) ---
     [HttpPut("{id}/status")]
     public async Task<IActionResult> UpdateStatus(int id, [FromBody] string newStatus)
     {
@@ -63,19 +70,15 @@ public class AppointmentsController : ControllerBase
         return Ok();
     }
 
-
+    // --- GET: Specific User's Appointments ---
     [HttpGet("my-bookings")]
     public async Task<ActionResult<List<Appointment>>> GetMyBookings([FromQuery] string name)
     {
-        // Search the database for appointments matching THIS specific customer
         var myBookings = await _db.Appointments
             .Where(a => a.CustomerName == name)
             .OrderByDescending(a => a.AppointmentDate)
-            .ThenBy(a => a.TimeSlot)
             .ToListAsync();
 
         return Ok(myBookings);
     }
 }
-
-

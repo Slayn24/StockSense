@@ -19,4 +19,7 @@ public class Appointment
     public decimal TotalAmount { get; set; } // Stores the calculated P900
 
     public string Status { get; set; } = "Pending";
+
+    public string Category { get; set; } = "General";
+
 }

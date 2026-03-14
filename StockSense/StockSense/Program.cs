@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using StockSense.Components;
 using StockSense.Components.Account;
 using StockSense.Data;
+using StockSense.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -42,6 +43,16 @@ builder.Services.AddTransient<EmailSender>();
 builder.Services.AddControllers();
 builder.Services.AddScoped<IPasswordHasher<ApplicationUser>, StockSense.Utility.Security.BCryptPasswordHasher>();
 builder.Services.AddAntiforgery();
+builder.Services.AddScoped<OrderSlipService>();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+    });
+
+builder.Services.AddScoped<TransactionService>();
+
+builder.Services.AddHttpClient();
 
 var app = builder.Build();
 

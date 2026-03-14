@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
-using StockSense.Migrations;
+using StockSense.shared;
 using StockSense.Shared;
 
 namespace StockSense.Data
@@ -11,5 +11,8 @@ namespace StockSense.Data
         public DbSet<StoreService> StoreServices { get; set; }
         public DbSet<Product> Products { get; set; }
         public DbSet<BuildRequest> BuildRequests { get; set; }
+        public DbSet<OrderSlip> OrderSlips { get; set; }
+        public DbSet<OrderSlipItem> OrderSlipItems { get; set; }
+        public DbSet<Supplier> Suppliers { get; set; }
     }
 }

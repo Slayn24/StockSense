@@ -5,7 +5,7 @@
 namespace StockSense.Migrations
 {
     /// <inheritdoc />
-    public partial class buildSetup : Migration
+    public partial class stockout : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)

@@ -1,7 +1,128 @@
 ﻿@page "/Dashboard"
+@using StockSense.Shared
+@inject HttpClient Http
+@inject NavigationManager NavManager
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
 
-<h3>Dashboard</h3>
+<PageTitle>StockSense Dashboard</PageTitle>
+
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="text-dark mb-0"><i class="bi bi-speedometer2 me-2"></i>Admin Overview</h2>
+        <button class="btn btn-danger shadow-sm" @onclick='() => NavManager.NavigateTo("/admin/orderslips?orderAll=true")'>
+            <i class="bi bi-cart-check-fill me-1"></i> Order All Low Stock
+        </button>
+    </div>
+
+    @if (data == null)
+    {
+        <div class="text-center mt-5">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-2">Loading Dashboard Data...</p>
+        </div>
+    }
+    else
+    {
+        <div class="row g-3 mb-4">
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm bg-primary text-white">
+                    <div class="card-body">
+                        <h6 class="text-uppercase small fw-bold">Total Products</h6>
+                        <h2 class="mb-0">@data.TotalProducts</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm bg-danger text-white">
+                    <div class="card-body">
+                        <h6 class="text-uppercase small fw-bold">Critical Low Stock</h6>
+                        <h2 class="mb-0">@data.LowStockCount</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm bg-success text-white">
+                    <div class="card-body">
+                        <h6 class="text-uppercase small fw-bold">Inventory Value</h6>
+                        <h2 class="mb-0">₱@data.TotalValue.ToString("N0")</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm bg-info text-white">
+                    <div class="card-body">
+                        <h6 class="text-uppercase small fw-bold">Open Orders</h6>
+                        <h2 class="mb-0">@data.PendingOrders</h2>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white fw-bold">Stock Alerts (Needs Ordering)</div>
+                    <div class="card-body p-0">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light small text-uppercase">
+                                <tr>
+                                    <th>Product Details</th>
+                                    <th>Category</th>
+                                    <th>Status</th>
+                                    <th class="text-center">Quick Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var p in data.LowStockProducts)
+                                {
+                                    <tr>
+                                        <td>
+                                            <div class="fw-bold">@p.Name</div>
+                                            <div class="small text-muted">@p.Brand</div>
+                                        </td>
+                                        <td><span class="badge bg-light text-dark border">@p.Category</span></td>
+                                        <td>
+                                            <span class="text-danger fw-bold">@p.CurrentStock</span>
+                                            <span class="text-muted small"> / @p.ReorderTarget target</span>
+                                        </td>
+                                        <td class="text-center">
+                                            <button class="btn btn-sm btn-primary px-3"
+                                                    @onclick='() => NavManager.NavigateTo($"/admin/orderslips?productId={p.Id}")'>
+                                                Order Now
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
 
 @code {
+    private DashboardDTO? data;
 
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            data = await Http.GetFromJsonAsync<DashboardDTO>("api/dashboard/stats");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error: {ex.Message}");
+        }
+    }
+
+    public class DashboardDTO
+    {
+        public int TotalProducts { get; set; }
+        public int LowStockCount { get; set; }
+        public decimal TotalValue { get; set; }
+        public int PendingOrders { get; set; }
+        public List<Product> LowStockProducts { get; set; } = new();
+    }
 }

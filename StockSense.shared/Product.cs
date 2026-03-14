@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using StockSense.shared;
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace StockSense.Shared
@@ -19,6 +20,14 @@ namespace StockSense.Shared
         public decimal Price { get; set; }
 
         public string ImageUrl { get; set; } = "https://placehold.co/300x200"; // Placeholder image
+
+        // Add these to your REAL Product class if they are missing!
+        public int CurrentStock { get; set; }
+        public int ReorderTarget { get; set; }
+
+        // This links the product to the Supplier class we just made
+        public int SupplierId { get; set; }
+        public virtual Supplier Supplier { get; set; } = null!;
     }
 
     // We also need a model to save the final build

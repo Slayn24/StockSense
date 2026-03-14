@@ -1,0 +1,167 @@
+﻿@page "/admin/pos"
+@using StockSense.shared
+@using StockSense.Services
+@using Microsoft.EntityFrameworkCore
+@inject StockSense.Data.ApplicationDbContext Context
+@inject TransactionService SaleService
+@rendermode InteractiveServer
+
+<div class="container-fluid mt-3">
+    <div class="row">
+        @* --- Category Sidebar --- *@
+        <div class="col-md-2">
+            <div class="list-group shadow-sm sticky-top" style="top: 20px;">
+                <button type="button" class="list-group-item list-group-item-action @(selectedCategory == null ? "active" : "")"
+                        @onclick="() => selectedCategory = null">
+                    All Categories
+                </button>
+                @foreach (var cat in categories)
+                {
+                    <button type="button" class="list-group-item list-group-item-action @(selectedCategory == cat ? "active" : "")"
+                            @onclick="() => selectedCategory = cat">
+                        @cat
+                    </button>
+                }
+            </div>
+        </div>
+
+        @* --- Product Catalog --- *@
+        <div class="col-md-5">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">@(selectedCategory ?? "All Items")</h6>
+                    <input type="text" class="form-control form-control-sm w-50" placeholder="Search..." @bind-value="searchTerm" @bind-value:event="oninput" />
+                </div>
+                <div class="card-body bg-light overflow-auto" style="max-height: 80vh;">
+                    <div class="row g-2">
+                        @foreach (var p in FilteredProducts)
+                        {
+                            <div class="col-6">
+                                <div class="card h-100 border-0 shadow-sm @(p.CurrentStock <= 0 ? "opacity-50" : "")"
+                                     style="cursor: pointer;" @onclick="() => AddToCart(p)">
+                                    <div class="card-body p-2 text-center">
+                                        <div class="fw-bold small text-truncate">@p.Name</div>
+                                        <div class="text-muted" style="font-size: 0.75rem;">@p.Brand</div>
+                                        <div class="text-primary fw-bold">₱@p.Price.ToString("N2")</div>
+                                        <div class="small mt-1">Stock: @p.CurrentStock</div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* --- Cart Section --- *@
+        <div class="col-md-5">
+            <div class="card shadow border-0">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-cart3 me-2"></i>Current Order</h5>
+                </div>
+                <div class="card-body">
+                    @if (!cart.Any())
+                    {
+                        <div class="text-center py-5 text-muted">Cart is empty</div>
+                    }
+                    else
+                    {
+                        <table class="table table-sm">
+                            <thead>
+                                <tr class="small text-muted">
+                                    <th>Item</th>
+                                    <th>Qty</th>
+                                    <th class="text-end">Total</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in cart)
+                                {
+                                    <tr>
+                                        <td class="small">@item.ProductName</td>
+                                        <td><input type="number" class="form-control form-control-sm" @bind="item.Quantity" style="width: 60px;" /></td>
+                                        <td class="text-end small">₱@((item.Price * item.Quantity).ToString("N2"))</td>
+                                        <td><button class="btn btn-sm text-danger" @onclick="() => cart.Remove(item)">×</button></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                        <div class="border-top pt-3">
+                            @if (!string.IsNullOrEmpty(statusMessage))
+                            {
+                                <div class="alert alert-success p-2 small">@statusMessage</div>
+                            }
+                            <div class="d-flex justify-content-between h4">
+                                <span>Total:</span>
+                                <span class="text-primary fw-bold">₱@TotalAmount.ToString("N2")</span>
+                            </div>
+                            <button class="btn btn-success w-100 py-2 fw-bold" @onclick="Checkout" disabled="@isProcessing">
+                                @(isProcessing ? "PROCESSING..." : "CONFIRM SALE")
+                            </button>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<Product> allProducts = new();
+    private List<string> categories = new();
+    private List<CartItem> cart = new();
+    private string? selectedCategory;
+    private string searchTerm = "";
+    private bool isProcessing = false;
+    private string? statusMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        allProducts = await Context.Products.AsNoTracking().ToListAsync();
+        // Extract unique categories from your product list
+        categories = allProducts
+            .Select(p => p.Category)
+            .Where(c => !string.IsNullOrEmpty(c))
+            .Distinct()
+            .OrderBy(c => c)
+            .ToList();
+    }
+
+    private IEnumerable<Product> FilteredProducts => allProducts
+        .Where(p => (string.IsNullOrEmpty(selectedCategory) || p.Category == selectedCategory) &&
+                    (string.IsNullOrWhiteSpace(searchTerm) ||
+                     p.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                     p.Brand.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)));
+
+    private decimal TotalAmount => cart.Sum(i => i.Price * i.Quantity);
+
+    private void AddToCart(Product p)
+    {
+        if (p.CurrentStock <= 0) return;
+        statusMessage = null;
+        var existing = cart.FirstOrDefault(i => i.ProductId == p.Id);
+        if (existing != null) existing.Quantity++;
+        else cart.Add(new CartItem { ProductId = p.Id, ProductName = p.Name, Price = p.Price, Quantity = 1 });
+    }
+
+    private async Task Checkout()
+    {
+        if (!cart.Any()) return;
+        isProcessing = true;
+        try
+        {
+            await SaleService.ProcessSaleAsync(cart);
+            statusMessage = "Stock Deducted!";
+            cart.Clear();
+            await LoadData(); // Refresh stock counts
+        }
+        catch (Exception ex) { statusMessage = "Error: " + ex.Message; }
+        finally { isProcessing = false; }
+    }
+}

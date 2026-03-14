@@ -47,4 +47,31 @@ public class EmailSender : IEmailSender<ApplicationUser>
         await client.SendAsync(message);
         await client.DisconnectAsync(true);
     }
+
+    public async Task SendEmailWithAttachmentAsync(string toEmail, string subject, string body, byte[] attachment, string fileName)
+    {
+        var message = new MimeMessage();
+        message.From.Add(new MailboxAddress("StockSense Support", _config["Smtp:User"]));
+        message.To.Add(new MailboxAddress("", toEmail));
+        message.Subject = subject;
+
+        var builder = new BodyBuilder { HtmlBody = body };
+
+        // Add the PDF attachment
+        if (attachment != null)
+        {
+            builder.Attachments.Add(fileName, attachment);
+        }
+
+        message.Body = builder.ToMessageBody();
+
+        using var client = new SmtpClient();
+        int port = _config.GetValue<int>("Smtp:Port");
+
+        await client.ConnectAsync(_config["Smtp:Host"], port, SecureSocketOptions.StartTls);
+        await client.AuthenticateAsync(_config["Smtp:User"], _config["Smtp:Pass"]);
+
+        await client.SendAsync(message);
+        await client.DisconnectAsync(true);
+    }
 }

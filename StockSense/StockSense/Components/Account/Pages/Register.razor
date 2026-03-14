@@ -29,14 +29,12 @@
             <hr />
             <ValidationSummary class="text-danger" role="alert" />
 
-            @* --- First Name Input --- *@
             <div class="form-floating mb-3">
                 <InputText @bind-Value="Input.FirstName" class="form-control" autocomplete="given-name" aria-required="true" placeholder="First Name" />
                 <label for="firstname">First Name</label>
                 <ValidationMessage For="() => Input.FirstName" class="text-danger" />
             </div>
 
-            @* --- Last Name Input --- *@
             <div class="form-floating mb-3">
                 <InputText @bind-Value="Input.LastName" class="form-control" autocomplete="family-name" aria-required="true" placeholder="Last Name" />
                 <label for="lastname">Last Name</label>
@@ -78,13 +76,14 @@
     {
         var user = CreateUser();
 
-        // --- Map inputs to the user object ---
         user.FirstName = Input.FirstName;
         user.LastName = Input.LastName;
 
         await UserStore.SetUserNameAsync(user, Input.Email, CancellationToken.None);
         var emailStore = GetEmailStore();
         await emailStore.SetEmailAsync(user, Input.Email, CancellationToken.None);
+
+        // 1. Create the user without assigning a role yet
         var result = await UserManager.CreateAsync(user, Input.Password);
 
         if (!result.Succeeded)
@@ -93,17 +92,7 @@
             return;
         }
 
-        // --- NEW: Assign the role immediately ---
-        // Note: The role "Customer" must already exist in your AspNetRoles table.
-        var roleResult = await UserManager.AddToRoleAsync(user, "Customer");
-
-        if (!roleResult.Succeeded)
-        {
-            identityErrors = roleResult.Errors;
-            return;
-        }
-
-        Logger.LogInformation("User created a new account with password and role assigned.");
+        Logger.LogInformation("User created a new account. Awaiting Admin approval.");
 
         var userId = await UserManager.GetUserIdAsync(user);
         var code = await UserManager.GenerateEmailConfirmationTokenAsync(user);
@@ -121,8 +110,9 @@
                 new() { ["email"] = Input.Email, ["returnUrl"] = ReturnUrl });
         }
 
-        await SignInManager.SignInAsync(user, isPersistent: false);
-        RedirectManager.RedirectTo(ReturnUrl);
+        // 2. IMPORTANT: We do NOT call SignInManager.SignInAsync here.
+        // Instead, we redirect them to a page explaining they need admin approval.
+        RedirectManager.RedirectTo("Account/AwaitingApproval");
     }
 
     private ApplicationUser CreateUser()

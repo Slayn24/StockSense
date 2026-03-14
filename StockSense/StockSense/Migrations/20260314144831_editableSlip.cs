@@ -5,25 +5,25 @@
 namespace StockSense.Migrations
 {
     /// <inheritdoc />
-    public partial class AddAppointmentStatus : Migration
+    public partial class editableSlip : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<string>(
-                name: "Status",
-                table: "Appointments",
-                type: "nvarchar(max)",
+            migrationBuilder.AddColumn<int>(
+                name: "ReceivedQuantity",
+                table: "OrderSlipItems",
+                type: "int",
                 nullable: false,
-                defaultValue: "");
+                defaultValue: 0);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropColumn(
-                name: "Status",
-                table: "Appointments");
+                name: "ReceivedQuantity",
+                table: "OrderSlipItems");
         }
     }
 }

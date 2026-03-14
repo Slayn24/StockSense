@@ -1,20 +1,15 @@
 ﻿@inherits LayoutComponentBase
 @using StockSense.Client.Layout
 
-<AuthorizeView Roles="admin">
+<AuthorizeView Roles="Admin">
     <Authorized>
-        @* ---- ADMINS: Get the MainLayout AND the Inner Account Sidebar ---- *@
+        @* ---- ADMINS: Full width Body within MainLayout (Sidebar already exists in MainLayout) ---- *@
         <LayoutView Layout="@typeof(MainLayout)">
             <div class="container pt-4">
                 <h2>Manage your account</h2>
                 <hr />
                 <div class="row">
-                    @* The inner sidebar for admins *@
-                    <div class="col-md-3">
-                        <ManageNavMenu />
-                    </div>
-                    @* The profile form *@
-                    <div class="col-md-9">
+                    <div class="col-12">
                         @Body
                     </div>
                 </div>
@@ -22,17 +17,18 @@
         </LayoutView>
     </Authorized>
     <NotAuthorized>
-        @* ---- REGULAR USERS: Get the EmptyLayout AND the Inner Account Sidebar ---- *@
+        @* ---- REGULAR USERS: Dashboard style within EmptyLayout ---- *@
         <LayoutView Layout="@typeof(EmptyLayout)">
             <div class="container pt-4">
                 <h2>My Profile</h2>
                 <hr />
                 <div class="row">
-                    @* Added this back! The inner sidebar for regular users *@
+                    @* --- SIDEBAR MENU FOR USERS --- *@
                     <div class="col-md-3">
                         <ManageNavMenu />
                     </div>
-                    @* Shrunk the profile form back to 9 columns to fit the sidebar *@
+
+                    @* --- CONTENT AREA --- *@
                     <div class="col-md-9">
                         @Body
                     </div>
